@@ -2,7 +2,7 @@ Summary: Traces the route taken by packets over an IPv4/IPv6 network
 Name: traceroute
 Epoch: 3
 Version: 2.0.19
-Release: 3%{?dist}
+Release: 5%{?dist}
 Group: Applications/Internet
 License: GPLv2+
 URL:  http://traceroute.sourceforge.net
@@ -61,6 +61,12 @@ popd
 
 
 %changelog
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 3:2.0.19-5
+- Mass rebuild 2014-01-24
+
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 3:2.0.19-4
+- Mass rebuild 2013-12-27
+
 * Mon Apr 15 2013 Dmitry Butskoy <Dmitry@Butskoy.name>  - 3:2.0.19-3
 - describe all long options in man page (<jsynacek@redhat.com>, #950356)
 
