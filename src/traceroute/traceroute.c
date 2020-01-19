@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <netinet/icmp6.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/in.h>
@@ -52,6 +52,14 @@
 #define IPV6_PMTUDISC_PROBE 3
 #endif
 
+#ifndef AI_IDN
+#define AI_IDN	0
+#endif
+
+#ifndef NI_IDN
+#define NI_IDN	0
+#endif
+
 
 #define MAX_HOPS	255
 #define MAX_PROBES	10
@@ -72,7 +80,7 @@
 
 
 static char version_string[] = "Modern traceroute for Linux, "
-				"version " _TEXT(VERSION) ", " __DATE__
+				"version " _TEXT(VERSION)
 				"\nCopyright (c) 2008  Dmitry Butskoy, "
 				"  License: GPL v2 or any later";
 static int debug = 0;
@@ -148,7 +156,7 @@ void error (const char *str) {
 void error_or_perm (const char *str) {
 
 	if (errno == EPERM)
-		fprintf (stderr, "You have no enough privileges to use "
+		fprintf (stderr, "You do not have enough privileges to use "
 				"this traceroute method.");
 	error (str);
 }
@@ -325,7 +333,7 @@ static void init_ip_options (void) {
 	    rth->ip6r_type = ipv6_rthdr_type;
 	    rth->ip6r_segleft = num_gateways;
 
-	    *((u_int32_t *) (rth + 1)) = 0;
+	    *((uint32_t *) (rth + 1)) = 0;
 
 	    in6 = (struct in6_addr *) (rtbuf + 8);
 	    for (i = 0; i < num_gateways; i++)
@@ -606,7 +614,7 @@ int main (int argc, char *argv[]) {
 		    htonl (((tos & 0xff) << 20) | (flow_label & 0x000fffff));
 
 	if (src_port) {
-	    src_addr.sin.sin_port = htons ((u_int16_t) src_port);
+	    src_addr.sin.sin_port = htons ((uint16_t) src_port);
 	    src_addr.sa.sa_family = af;
 	}
 
@@ -808,6 +816,15 @@ static void check_expired (probe *pb) {
 	   If we can detect/assume that it so, then just put "final"
 	   to the (pseudo-expired) "this" place.
 	*/
+
+	/*  It seems that the case of "answers for latest ones only"
+	   occurs mostly with icmp_unreach error answers ("!H" etc.).
+	   Icmp_echoreply, tcp_reset and even icmp_port_unreach looks
+	   like going in the right order.
+ 	*/
+	if (!fp->err_str[0])	/*  not an icmp_unreach error report...  */
+		return;
+
 
 	if (pfp ||
 	    (idx % probes_per_hop) + (fp - pb) < probes_per_hop
@@ -1243,6 +1260,19 @@ void parse_icmp_res (probe *pb, int type, int code, int info) {
 }
 
 
+static void parse_local_res (probe *pb, int ee_errno, int info) {
+
+	if (ee_errno == EMSGSIZE && info != 0) {
+	    snprintf (pb->err_str, sizeof(pb->err_str)-1, "!F-%d", info);
+	    pb->final = 1;
+	    return;
+	}
+
+	errno = ee_errno;
+	error ("local recverr");
+}
+
+
 void probe_done (probe *pb) {
 
 	if (pb->sk) {
@@ -1312,7 +1342,17 @@ void recv_reply (int sk, int err, check_reply_t check_reply) {
 
 
 	pb = check_reply (sk, err, &from, bufp, n);
-	if (!pb)  return;
+	if (!pb) {
+
+	    /*  for `frag needed' case at the local host,
+		kernel >= 3.13 sends local error (no more icmp)
+	    */
+	    if (!n && err && dontfrag) {
+		pb = &probes[(first_hop - 1) * probes_per_hop];
+		if (pb->done)  return;
+	    } else
+		return;
+	}
 
 
 	/*  Parse CMSG stuff   */
@@ -1336,12 +1376,14 @@ void recv_reply (int sk, int err, check_reply_t check_reply) {
 
 		    ee = (struct sock_extended_err *) ptr;
 
-		    if (ee->ee_origin != SO_EE_ORIGIN_ICMP)
-			    ee = NULL;
+		    if (ee->ee_origin != SO_EE_ORIGIN_ICMP &&
+			ee->ee_origin != SO_EE_ORIGIN_LOCAL
+		    )  return;
 
 		    /*  dgram icmp sockets might return extra things...  */
-		    if (ee->ee_type == ICMP_SOURCE_QUENCH ||
-			ee->ee_type == ICMP_REDIRECT
+		    if (ee->ee_origin == SO_EE_ORIGIN_ICMP &&
+			(ee->ee_type == ICMP_SOURCE_QUENCH ||
+			 ee->ee_type == ICMP_REDIRECT)
 		    )  return;
 		}
 	    }
@@ -1353,8 +1395,9 @@ void recv_reply (int sk, int err, check_reply_t check_reply) {
 
 		    ee = (struct sock_extended_err *) ptr;
 
-		    if (ee->ee_origin != SO_EE_ORIGIN_ICMP6)
-			    ee = NULL;
+		    if (ee->ee_origin != SO_EE_ORIGIN_ICMP6 &&
+			ee->ee_origin != SO_EE_ORIGIN_LOCAL
+		    )  return;
 		}
 	    }
 	}
@@ -1370,10 +1413,13 @@ void recv_reply (int sk, int err, check_reply_t check_reply) {
 
 	pb->recv_ttl = recv_ttl;
 
-	if (ee) {
+	if (ee && ee->ee_origin != SO_EE_ORIGIN_LOCAL) {    /*  icmp or icmp6   */
 	    memcpy (&pb->res, SO_EE_OFFENDER (ee), sizeof(pb->res));
 	    parse_icmp_res (pb, ee->ee_type, ee->ee_code, ee->ee_info);
 	}
+
+	if (ee && ee->ee_origin == SO_EE_ORIGIN_LOCAL)
+		parse_local_res (pb, ee->ee_errno, ee->ee_info);
 
 
 	if (ee &&
@@ -1521,7 +1567,7 @@ int do_send (int sk, const void *data, size_t len, const sockaddr_any *addr) {
 	    if (errno == ENOBUFS || errno == EAGAIN)
 		    return res;
 	    if (errno == EMSGSIZE)
-		    return 0;	/*  icmp will say more...  */
+		    return 0;	/*  recverr will say more...  */
 	    error ("send");	/*  not recoverable   */
 	}
 

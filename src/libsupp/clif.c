@@ -792,9 +792,9 @@ static void box_output (int start, int left, int width, const char *str,
 	if (l > 0) {
 	    memset (buf, ' ', l);
 	    buf[l] = '\0';
-	    fprintf (stderr, buf);
+	    fprintf (stderr, "%s", buf);
 	} else 
-	    fprintf (stderr, spacer);
+	    fprintf (stderr, "%s", spacer);
 
 
 	endp = buf + width;
@@ -833,7 +833,7 @@ static void box_output (int start, int left, int width, const char *str,
 		    
 	    *p = '\0';
 	    fprintf (stderr, "%s", buf);
-	    fprintf (stderr, spacer);
+	    fprintf (stderr, "%s", spacer);
 		
 	    p++;
 	    for (s = buf; *p; *s++ = *p++) ;
@@ -1177,7 +1177,7 @@ static int set_int (int *data, char *arg) {
 
 	*data = (int) strtol (arg, &q, 0);
 
-	return  (q == arg) ? -1 : 0;
+	return  (q == arg || *q) ? -1 : 0;
 }
 
 static int set_uint (unsigned int *data, char *arg) {
@@ -1187,7 +1187,7 @@ static int set_uint (unsigned int *data, char *arg) {
 
 	*data = (unsigned int) strtoul (arg, &q, 0);
 
-	return  (q == arg) ? -1 : 0;
+	return  (q == arg || *q) ? -1 : 0;
 }
 
 static int set_double (double *data, char *arg) {
@@ -1197,7 +1197,7 @@ static int set_double (double *data, char *arg) {
 
 	*data = strtod (arg, &q);
 
-	return  (q == arg) ? -1 : 0;
+	return  (q == arg || *q) ? -1 : 0;
 }
 
 

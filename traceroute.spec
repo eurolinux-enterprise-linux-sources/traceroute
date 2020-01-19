@@ -1,16 +1,16 @@
 Summary: Traces the route taken by packets over an IPv4/IPv6 network
 Name: traceroute
 Epoch: 3
-Version: 2.0.19
-Release: 5%{?dist}
+Version: 2.0.22
+Release: 2%{?dist}
 Group: Applications/Internet
 License: GPLv2+
 URL:  http://traceroute.sourceforge.net
 Source0: http://downloads.sourceforge.net/project/traceroute/traceroute/traceroute-%{version}/traceroute-%{version}.tar.gz
-Patch0: traceroute-2.0.19-man.patch
-
 Provides: tcptraceroute = 1.5-1
 Obsoletes: tcptraceroute < 1.5-1
+Provides: /bin/traceroute
+Provides: /bin/traceroute6
 
 
 %description
@@ -27,7 +27,6 @@ problems.
 
 %prep
 %setup -q
-%patch0 -p1
 
 
 %build
@@ -36,13 +35,12 @@ make %{?_smp_mflags} CFLAGS="$RPM_OPT_FLAGS" LDFLAGS=""
 
 %install
 
-install -d $RPM_BUILD_ROOT/bin
-install -m755 traceroute/traceroute $RPM_BUILD_ROOT/bin
-pushd $RPM_BUILD_ROOT/bin
+install -d $RPM_BUILD_ROOT%{_bindir}
+install -m755 traceroute/traceroute $RPM_BUILD_ROOT%{_bindir}
+pushd $RPM_BUILD_ROOT%{_bindir}
 ln -s traceroute traceroute6
 popd
 
-install -d $RPM_BUILD_ROOT%{_bindir}
 install -m755 wrappers/tcptraceroute $RPM_BUILD_ROOT%{_bindir}
 
 install -d $RPM_BUILD_ROOT%{_mandir}/man8
@@ -55,12 +53,17 @@ popd
 
 %files
 %doc COPYING README TODO CREDITS
-/bin/*
 %{_bindir}/*
 %{_mandir}/*/*
 
 
 %changelog
+* Mon Mar  7 2016 Jan Synáček <jsynacek@redhat.com> - 3:2.0.22-2
+- Get rid of /bin in the package
+
+* Mon Mar  7 2016 Jan Synáček <jsynacek@redhat.com> - 3:2.0.22-1
+- Update to 2.0.22 (#1112211)
+
 * Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 3:2.0.19-5
 - Mass rebuild 2014-01-24
 
